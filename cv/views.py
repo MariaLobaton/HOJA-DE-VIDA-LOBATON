@@ -13,9 +13,9 @@ from .models import (
 )
 
 
-# ======================================================
-# ✅ VISTA NORMAL HTML
-# ======================================================
+
+#  VISTA NORMAL HTML
+
 def cv_view(request):
     perfil = DatosPersonales.objects.filter(perfilactivo=1).first()
 
@@ -52,7 +52,7 @@ def cv_view(request):
             activarparaqueseveaenfront=True
         )
 
-        # ✅ Solo mostrar lo que NO esté vendido (si existe ese estado)
+        #  Solo mostrar lo que NO esté vendido (si existe ese estado)
         garage = VentaGarage.objects.filter(
             perfil=perfil,
             activarparaqueseveaenfront=True
@@ -69,9 +69,9 @@ def cv_view(request):
     })
 
 
-# ======================================================
-# ✅ PDF
-# ======================================================
+
+#  PDF
+
 def cv_pdf(request):
     secciones = request.GET.getlist("sec")
     perfil = DatosPersonales.objects.filter(perfilactivo=1).first()
@@ -125,9 +125,9 @@ def cv_pdf(request):
     x_right = width - 2 * cm
     y = height - 2 * cm
 
-    # --------------------------
+    
     # Funciones de apoyo
-    # --------------------------
+    
     def nueva_pagina_si_es_necesario():
         nonlocal y
         if y < 3 * cm:
@@ -144,7 +144,7 @@ def cv_pdf(request):
         # Aire arriba (para que no se pegue a la tarjeta anterior)
         y -= 0.15 * cm
 
-        # ✅ Título
+        #  Título
         p.setFillColor(colors.HexColor("#1f2937"))
         p.setFont("Helvetica-Bold", 12)
         p.drawString(x_left, y, text.upper())
@@ -152,7 +152,7 @@ def cv_pdf(request):
         # bajar un poquito para que NO roce
         y -= 0.55 * cm
 
-        # ✅ Línea abajo (NO en datos personales si no quieres)
+        #  Línea abajo (NO en datos personales si no quieres)
         if text.lower() != "datos personales":
             p.setStrokeColor(colors.HexColor("#1f2937"))
             p.setLineWidth(1)
@@ -221,7 +221,7 @@ def cv_pdf(request):
                     linea = w
             return lineas
 
-        # ✅ altura real
+        # altura real
         card_height = 10
         card_height += 16  # título
 
@@ -234,7 +234,7 @@ def cv_pdf(request):
 
         card_height += 14
 
-        # ✅ dibujar tarjeta
+        #  dibujar tarjeta
         p.setFillColor(colors.HexColor("#F3F4F6"))
         p.setStrokeColor(colors.HexColor("#D1D5DB"))
         p.roundRect(
@@ -277,9 +277,9 @@ def cv_pdf(request):
 
         y -= (card_height + 14)
 
-    # --------------------------
+    
     # Encabezado con foto
-    # --------------------------
+    
     if not perfil:
         p.setFont("Helvetica-Bold", 14)
         p.drawString(x_left, y, "No existe un perfil activo.")
@@ -287,7 +287,7 @@ def cv_pdf(request):
         p.save()
         return response
 
-    # ✅ Foto más grande + buena posición
+    #  Foto más grande + buena posición
     foto_size = 3.6 * cm
     foto_x = x_right - foto_size - 0.6 * cm
     foto_y = height - 5.0 * cm
@@ -299,30 +299,30 @@ def cv_pdf(request):
         except:
             pass
 
-    # ✅ Nombre
+    # Nombre
     p.setFillColor(colors.HexColor("#111827"))
     p.setFont("Helvetica-Bold", 18)
     p.drawString(x_left, y, f"{perfil.nombres} {perfil.apellidos}")
     y -= 22
 
-    # ✅ Descripción
+    #  Descripción
     p.setFillColor(colors.HexColor("#4b5563"))
     p.setFont("Helvetica", 11)
     p.drawString(x_left, y, perfil.descripcionperfil)
     y -= 25
 
-    # --------------------------
+    
     # Datos personales
-    # --------------------------
+    
     if "datos" in secciones:
         draw_section_title("Datos personales")
         draw_wrapped_text(f"Cédula: {perfil.numerocedula}", size=10)
         draw_wrapped_text(f"Nacionalidad: {perfil.nacionalidad}", size=10)
         draw_wrapped_text(f"Dirección: {perfil.direcciondomiciliaria}", size=10)
 
-    # --------------------------
+    
     # Experiencia
-    # --------------------------
+    
     if "experiencia" in secciones:
         draw_section_title("Experiencia laboral")
         if experiencia:
@@ -335,9 +335,9 @@ def cv_pdf(request):
         else:
             draw_card("No hay experiencia registrada.")
 
-    # --------------------------
+    
     # Cursos
-    # --------------------------
+    
     if "cursos" in secciones:
         draw_section_title("Cursos realizados")
         if cursos:
@@ -350,9 +350,9 @@ def cv_pdf(request):
         else:
             draw_card("No hay cursos registrados.")
 
-    # --------------------------
+    
     # Reconocimientos
-    # --------------------------
+    
     if "reconocimientos" in secciones:
         draw_section_title("Reconocimientos")
         if reconocimientos:
@@ -365,9 +365,9 @@ def cv_pdf(request):
         else:
             draw_card("No hay reconocimientos registrados.")
 
-    # --------------------------
+    
     # Productos académicos
-    # --------------------------
+
     if "prod_academicos" in secciones:
         draw_section_title("Productos académicos")
         if productos_academicos:
@@ -380,9 +380,9 @@ def cv_pdf(request):
         else:
             draw_card("No hay productos académicos registrados.")
 
-    # --------------------------
+    
     # Productos laborales
-    # --------------------------
+    
     if "prod_laborales" in secciones:
         draw_section_title("Productos laborales")
         if productos_laborales:
@@ -395,9 +395,9 @@ def cv_pdf(request):
         else:
             draw_card("No hay productos laborales registrados.")
 
-    # --------------------------
+    
     # Venta de garage
-    # --------------------------
+    
     if "garage" in secciones:
         draw_section_title("Venta de garage")
         if garage:
