@@ -5,7 +5,9 @@ from django.core.validators import MinValueValidator, RegexValidator
 from django.db.models import Q, F
 
 
+# ===============================
 # ✅ VALIDADORES REUSABLES
+# ===============================
 telefono_validator = RegexValidator(
     regex=r"^\d{8,10}$",
     message="El teléfono debe tener solo números y entre 8 a 10 dígitos."
@@ -18,9 +20,25 @@ cedula_validator = RegexValidator(
 
 
 # ===============================
+# ✅ MODELO BASE (OBLIGA VALIDACIÓN)
+# ===============================
+class ValidatedModel(models.Model):
+    """
+    Esto hace que SIEMPRE se ejecute full_clean() antes de guardar.
+    Así tus validators y clean() se cumplen siempre.
+    """
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # ✅ fuerza validaciones
+        return super().save(*args, **kwargs)
+
+
+# ===============================
 # ✅ DATOS PERSONALES
 # ===============================
-class DatosPersonales(models.Model):
+class DatosPersonales(ValidatedModel):
     idperfil = models.AutoField(primary_key=True)
     descripcionperfil = models.CharField(max_length=50)
     perfilactivo = models.IntegerField(default=1)
@@ -37,7 +55,14 @@ class DatosPersonales(models.Model):
         validators=[cedula_validator]
     )
 
-    sexo = models.CharField(max_length=1)
+    sexo = models.CharField(
+        max_length=1,
+        choices=[
+            ("H", "Hombre"),
+            ("M", "Mujer"),
+        ],
+    )
+
     estadocivil = models.CharField(max_length=50)
     licenciaconducir = models.CharField(max_length=6, blank=True, null=True)
 
@@ -46,6 +71,7 @@ class DatosPersonales(models.Model):
         blank=True, null=True,
         validators=[telefono_validator]
     )
+
     telefonofijo = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -57,7 +83,7 @@ class DatosPersonales(models.Model):
     sitioweb = models.CharField(max_length=60, blank=True, null=True)
 
     def clean(self):
-        # ✅ Validación fecha de nacimiento
+        # ✅ Fecha nacimiento no puede ser futura
         if self.fechanacimiento and self.fechanacimiento > timezone.now().date():
             raise ValidationError({"fechanacimiento": "La fecha de nacimiento no puede ser futura."})
 
@@ -68,7 +94,7 @@ class DatosPersonales(models.Model):
 # ===============================
 # ✅ EXPERIENCIA LABORAL
 # ===============================
-class ExperienciaLaboral(models.Model):
+class ExperienciaLaboral(ValidatedModel):
     idexperiencialaboral = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -103,34 +129,34 @@ class ExperienciaLaboral(models.Model):
     )
 
     def clean(self):
-        # ✅ Si hay fecha fin, debe ser mayor o igual a inicio
-        if self.fechafingestion and self.fechafingestion < self.fechainiciogestion:
-            raise ValidationError({
-                "fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."
-            })
-
-        # ✅ Evitar fechas futuras
         hoy = timezone.now().date()
-        if self.fechainiciogestion > hoy:
+
+        # ✅ Inicio no puede ser futuro
+        if self.fechainiciogestion and self.fechainiciogestion > hoy:
             raise ValidationError({"fechainiciogestion": "La fecha de inicio no puede ser futura."})
+
+        # ✅ Fin no puede ser futuro
         if self.fechafingestion and self.fechafingestion > hoy:
             raise ValidationError({"fechafingestion": "La fecha de fin no puede ser futura."})
+
+        # ✅ Fin no puede ser menor que inicio
+        if self.fechafingestion and self.fechainiciogestion and self.fechafingestion < self.fechainiciogestion:
+            raise ValidationError({"fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."})
 
     class Meta:
         db_table = "experiencialaboral"
         constraints = [
             models.CheckConstraint(
-                # ✅ AQUÍ VA condition= (NO check=)
                 condition=Q(fechafingestion__isnull=True) | Q(fechafingestion__gte=F("fechainiciogestion")),
-                name="experiencia_fechas_validas"
-            )
+                name="experiencia_fechas_validas",
+            ),
         ]
 
 
 # ===============================
 # ✅ RECONOCIMIENTOS
 # ===============================
-class Reconocimientos(models.Model):
+class Reconocimientos(ValidatedModel):
     idreconocimiento = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -139,12 +165,21 @@ class Reconocimientos(models.Model):
         db_column="idperfilconqueestaactivo"
     )
 
-    tiporeconocimiento = models.CharField(max_length=100)
+    tiporeconocimiento = models.CharField(
+        max_length=100,
+        choices=[
+            ("Académico", "Académico"),
+            ("Público", "Público"),
+            ("Privado", "Privado"),
+        ]
+    )
+
     fechareconocimiento = models.DateField()
     descripcionreconocimiento = models.CharField(max_length=100)
 
     entidadpatrocinadora = models.CharField(max_length=100)
     nombrecontactoauspicia = models.CharField(max_length=100, blank=True, null=True)
+
     telefonocontactoauspicia = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -156,7 +191,7 @@ class Reconocimientos(models.Model):
 
     def clean(self):
         hoy = timezone.now().date()
-        if self.fechareconocimiento > hoy:
+        if self.fechareconocimiento and self.fechareconocimiento > hoy:
             raise ValidationError({"fechareconocimiento": "La fecha del reconocimiento no puede ser futura."})
 
     class Meta:
@@ -166,7 +201,7 @@ class Reconocimientos(models.Model):
 # ===============================
 # ✅ CURSOS REALIZADOS
 # ===============================
-class CursosRealizados(models.Model):
+class CursosRealizados(ValidatedModel):
     idcursorealizado = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -179,13 +214,14 @@ class CursosRealizados(models.Model):
     fechainicio = models.DateField()
     fechafin = models.DateField()
 
-    # ✅ NO permite negativos
-    totalhoras = models.PositiveIntegerField(validators=[MinValueValidator(0)])
+    # ✅ NO negativos
+    totalhoras = models.PositiveIntegerField()
 
     descripcioncurso = models.CharField(max_length=100)
 
     entidadpatrocinadora = models.CharField(max_length=100)
     nombrecontactoauspicia = models.CharField(max_length=100, blank=True, null=True)
+
     telefonocontactoauspicia = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -198,33 +234,33 @@ class CursosRealizados(models.Model):
     rutacertificado = models.FileField(upload_to="certificados/cursos/", blank=True, null=True)
 
     def clean(self):
-        if self.fechafin < self.fechainicio:
+        hoy = timezone.now().date()
+
+        # ✅ Fin no puede ser menor que inicio
+        if self.fechafin and self.fechainicio and self.fechafin < self.fechainicio:
             raise ValidationError({"fechafin": "La fecha de fin NO puede ser menor que la fecha de inicio."})
 
-        hoy = timezone.now().date()
-        if self.fechainicio > hoy:
+        # ✅ No cursos futuros
+        if self.fechainicio and self.fechainicio > hoy:
             raise ValidationError({"fechainicio": "La fecha de inicio no puede ser futura."})
-        if self.fechafin > hoy:
+
+        if self.fechafin and self.fechafin > hoy:
             raise ValidationError({"fechafin": "La fecha de fin no puede ser futura."})
 
     class Meta:
         db_table = "cursosrealizados"
         constraints = [
             models.CheckConstraint(
-                condition=Q(totalhoras__gte=0),
-                name="curso_totalhoras_gte_0"
-            ),
-            models.CheckConstraint(
                 condition=Q(fechafin__gte=F("fechainicio")),
                 name="curso_fechas_validas"
-            )
+            ),
         ]
 
 
 # ===============================
 # ✅ PRODUCTOS ACADEMICOS
 # ===============================
-class ProductosAcademicos(models.Model):
+class ProductosAcademicos(ValidatedModel):
     idproductoacademico = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -236,7 +272,6 @@ class ProductosAcademicos(models.Model):
     nombrerecurso = models.CharField(max_length=100)
     clasificador = models.CharField(max_length=100)
     descripcion = models.CharField(max_length=100)
-
     activarparaqueseveaenfront = models.BooleanField(default=True)
 
     class Meta:
@@ -246,7 +281,7 @@ class ProductosAcademicos(models.Model):
 # ===============================
 # ✅ PRODUCTOS LABORALES
 # ===============================
-class ProductosLaborales(models.Model):
+class ProductosLaborales(ValidatedModel):
     idproductoslaborales = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -258,12 +293,11 @@ class ProductosLaborales(models.Model):
     nombreproducto = models.CharField(max_length=100)
     fechaproducto = models.DateField()
     descripcion = models.CharField(max_length=100)
-
     activarparaqueseveaenfront = models.BooleanField(default=True)
 
     def clean(self):
         hoy = timezone.now().date()
-        if self.fechaproducto > hoy:
+        if self.fechaproducto and self.fechaproducto > hoy:
             raise ValidationError({"fechaproducto": "La fecha del producto no puede ser futura."})
 
     class Meta:
@@ -273,7 +307,7 @@ class ProductosLaborales(models.Model):
 # ===============================
 # ✅ VENTA GARAGE
 # ===============================
-class VentaGarage(models.Model):
+class VentaGarage(ValidatedModel):
     idventagarage = models.AutoField(primary_key=True)
 
     perfil = models.ForeignKey(
@@ -283,11 +317,23 @@ class VentaGarage(models.Model):
     )
 
     nombreproducto = models.CharField(max_length=100)
-    estadoproducto = models.CharField(max_length=40)
+
+    estadoproducto = models.CharField(
+        max_length=40,
+        choices=[
+            ("Bueno", "Bueno"),
+            ("Regular", "Regular"),
+        ]
+    )
+
     descripcion = models.CharField(max_length=100)
 
-    # ✅ NO permite negativos
-    valordelbien = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
+    # ✅ NO negativos
+    valordelbien = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)]
+    )
 
     activarparaqueseveaenfront = models.BooleanField(default=True)
 
