@@ -38,7 +38,9 @@ class ValidatedModel(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
-        raise ValidationError("PRUEBA: si ves este error, tu código SI está activo.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 # ===============================
 # ✅ DATOS PERSONALES
