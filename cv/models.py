@@ -22,7 +22,7 @@ cedula_validator = RegexValidator(
 
 
 def fecha_no_futura(value):
-    """✅ Validador: no permitir fechas futuras"""
+    """✅ No permitir fechas futuras."""
     if value and value > timezone.now().date():
         raise ValidationError("La fecha no puede ser futura.")
 
@@ -32,16 +32,13 @@ def fecha_no_futura(value):
 # ===============================
 class ValidatedModel(models.Model):
     """
-    Esto hace que SIEMPRE se ejecute full_clean() antes de guardar.
-    Así tus validators y clean() se cumplen siempre.
+    ✅ Fuerza validaciones siempre que uses .save()
     """
     class Meta:
         abstract = True
 
     def save(self, *args, **kwargs):
-        self.full_clean()  # ✅ fuerza validaciones SI se usa save()
-        return super().save(*args, **kwargs)
-
+        raise ValidationError("PRUEBA: si ves este error, tu código SI está activo.")
 
 # ===============================
 # ✅ DATOS PERSONALES
@@ -56,7 +53,7 @@ class DatosPersonales(ValidatedModel):
     nacionalidad = models.CharField(max_length=20)
     lugarnacimiento = models.CharField(max_length=60)
 
-    # ✅ Bloquea fecha futura (por validador)
+    # ✅ no futura
     fechanacimiento = models.DateField(null=True, blank=True, validators=[fecha_no_futura])
 
     numerocedula = models.CharField(
@@ -76,12 +73,14 @@ class DatosPersonales(ValidatedModel):
     estadocivil = models.CharField(max_length=50)
     licenciaconducir = models.CharField(max_length=6, blank=True, null=True)
 
+    # ✅ SOLO 10 dígitos
     telefonoconvencional = models.CharField(
         max_length=10,
         blank=True, null=True,
         validators=[telefono_validator]
     )
 
+    # ✅ SOLO 10 dígitos
     telefonofijo = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -115,12 +114,15 @@ class ExperienciaLaboral(ValidatedModel):
     sitiowebempresa = models.CharField(max_length=100, blank=True, null=True)
 
     nombrecontactoempresarial = models.CharField(max_length=100, blank=True, null=True)
+
+    # ✅ SOLO 10 dígitos
     telefonocontactoempresarial = models.CharField(
         max_length=10,
         blank=True, null=True,
         validators=[telefono_validator]
     )
 
+    # ✅ no futuras
     fechainiciogestion = models.DateField(validators=[fecha_no_futura])
     fechafingestion = models.DateField(blank=True, null=True)
 
@@ -136,19 +138,17 @@ class ExperienciaLaboral(ValidatedModel):
     def clean(self):
         hoy = timezone.now().date()
 
-        if self.fechafingestion:
-            # ✅ fin no futura
-            if self.fechafingestion > hoy:
-                raise ValidationError({"fechafingestion": "La fecha de fin no puede ser futura."})
+        # ✅ fin no futura
+        if self.fechafingestion and self.fechafingestion > hoy:
+            raise ValidationError({"fechafingestion": "La fecha de fin no puede ser futura."})
 
-            # ✅ fin >= inicio
-            if self.fechainiciogestion and self.fechafingestion < self.fechainiciogestion:
-                raise ValidationError({"fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."})
+        # ✅ fin >= inicio
+        if self.fechafingestion and self.fechainiciogestion and self.fechafingestion < self.fechainiciogestion:
+            raise ValidationError({"fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."})
 
     class Meta:
         db_table = "experiencialaboral"
         constraints = [
-            # ✅ Fin nula o Fin >= Inicio (BD lo bloquea)
             models.CheckConstraint(
                 condition=Q(fechafingestion__isnull=True) | Q(fechafingestion__gte=F("fechainiciogestion")),
                 name="experiencia_fechas_validas",
@@ -177,12 +177,14 @@ class Reconocimientos(ValidatedModel):
         ]
     )
 
+    # ✅ no futura
     fechareconocimiento = models.DateField(validators=[fecha_no_futura])
     descripcionreconocimiento = models.CharField(max_length=100)
 
     entidadpatrocinadora = models.CharField(max_length=100)
     nombrecontactoauspicia = models.CharField(max_length=100, blank=True, null=True)
 
+    # ✅ SOLO 10 dígitos
     telefonocontactoauspicia = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -210,10 +212,11 @@ class CursosRealizados(ValidatedModel):
 
     nombrecurso = models.CharField(max_length=100)
 
+    # ✅ no futuras
     fechainicio = models.DateField(validators=[fecha_no_futura])
     fechafin = models.DateField(validators=[fecha_no_futura])
 
-    # ✅ NUNCA negativos (por validador + constraint)
+    # ✅ NO negativos (en código + en BD)
     totalhoras = models.IntegerField(validators=[MinValueValidator(0)])
 
     descripcioncurso = models.CharField(max_length=100)
@@ -221,6 +224,7 @@ class CursosRealizados(ValidatedModel):
     entidadpatrocinadora = models.CharField(max_length=100)
     nombrecontactoauspicia = models.CharField(max_length=100, blank=True, null=True)
 
+    # ✅ SOLO 10 dígitos
     telefonocontactoauspicia = models.CharField(
         max_length=10,
         blank=True, null=True,
@@ -286,7 +290,9 @@ class ProductosLaborales(ValidatedModel):
 
     nombreproducto = models.CharField(max_length=100)
 
+    # ✅ no futura
     fechaproducto = models.DateField(validators=[fecha_no_futura])
+
     descripcion = models.CharField(max_length=100)
     activarparaqueseveaenfront = models.BooleanField(default=True)
 
@@ -318,7 +324,7 @@ class VentaGarage(ValidatedModel):
 
     descripcion = models.CharField(max_length=100)
 
-    # ✅ NO negativos
+    # ✅ NO negativos (código + BD)
     valordelbien = models.DecimalField(
         max_digits=10,
         decimal_places=2,
