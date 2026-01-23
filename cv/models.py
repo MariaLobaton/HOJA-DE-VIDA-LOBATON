@@ -8,15 +8,23 @@ from django.db.models import Q, F
 # ===============================
 # ✅ VALIDADORES REUSABLES
 # ===============================
+
+# ✅ SOLO 10 dígitos (Ecuador)
 telefono_validator = RegexValidator(
-    regex=r"^\d{8,10}$",
-    message="El teléfono debe tener solo números y entre 8 a 10 dígitos."
+    regex=r"^\d{10}$",
+    message="El teléfono debe tener exactamente 10 dígitos numéricos."
 )
 
 cedula_validator = RegexValidator(
     regex=r"^\d{10}$",
     message="La cédula debe tener exactamente 10 dígitos numéricos."
 )
+
+
+def fecha_no_futura(value):
+    """✅ Validador: no permitir fechas futuras"""
+    if value and value > timezone.now().date():
+        raise ValidationError("La fecha no puede ser futura.")
 
 
 # ===============================
@@ -31,7 +39,7 @@ class ValidatedModel(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs):
-        self.full_clean()  # ✅ fuerza validaciones
+        self.full_clean()  # ✅ fuerza validaciones SI se usa save()
         return super().save(*args, **kwargs)
 
 
@@ -47,7 +55,9 @@ class DatosPersonales(ValidatedModel):
     nombres = models.CharField(max_length=60)
     nacionalidad = models.CharField(max_length=20)
     lugarnacimiento = models.CharField(max_length=60)
-    fechanacimiento = models.DateField(null=True, blank=True)
+
+    # ✅ Bloquea fecha futura (por validador)
+    fechanacimiento = models.DateField(null=True, blank=True, validators=[fecha_no_futura])
 
     numerocedula = models.CharField(
         max_length=10,
@@ -82,11 +92,6 @@ class DatosPersonales(ValidatedModel):
     direcciondomiciliaria = models.CharField(max_length=50, blank=True, null=True)
     sitioweb = models.CharField(max_length=60, blank=True, null=True)
 
-    def clean(self):
-        # ✅ Fecha nacimiento no puede ser futura
-        if self.fechanacimiento and self.fechanacimiento > timezone.now().date():
-            raise ValidationError({"fechanacimiento": "La fecha de nacimiento no puede ser futura."})
-
     class Meta:
         db_table = "datospersonales"
 
@@ -116,7 +121,7 @@ class ExperienciaLaboral(ValidatedModel):
         validators=[telefono_validator]
     )
 
-    fechainiciogestion = models.DateField()
+    fechainiciogestion = models.DateField(validators=[fecha_no_futura])
     fechafingestion = models.DateField(blank=True, null=True)
 
     descripcionfunciones = models.CharField(max_length=100)
@@ -131,21 +136,19 @@ class ExperienciaLaboral(ValidatedModel):
     def clean(self):
         hoy = timezone.now().date()
 
-        # ✅ Inicio no puede ser futuro
-        if self.fechainiciogestion and self.fechainiciogestion > hoy:
-            raise ValidationError({"fechainiciogestion": "La fecha de inicio no puede ser futura."})
+        if self.fechafingestion:
+            # ✅ fin no futura
+            if self.fechafingestion > hoy:
+                raise ValidationError({"fechafingestion": "La fecha de fin no puede ser futura."})
 
-        # ✅ Fin no puede ser futuro
-        if self.fechafingestion and self.fechafingestion > hoy:
-            raise ValidationError({"fechafingestion": "La fecha de fin no puede ser futura."})
-
-        # ✅ Fin no puede ser menor que inicio
-        if self.fechafingestion and self.fechainiciogestion and self.fechafingestion < self.fechainiciogestion:
-            raise ValidationError({"fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."})
+            # ✅ fin >= inicio
+            if self.fechainiciogestion and self.fechafingestion < self.fechainiciogestion:
+                raise ValidationError({"fechafingestion": "La fecha fin NO puede ser menor que la fecha de inicio."})
 
     class Meta:
         db_table = "experiencialaboral"
         constraints = [
+            # ✅ Fin nula o Fin >= Inicio (BD lo bloquea)
             models.CheckConstraint(
                 condition=Q(fechafingestion__isnull=True) | Q(fechafingestion__gte=F("fechainiciogestion")),
                 name="experiencia_fechas_validas",
@@ -174,7 +177,7 @@ class Reconocimientos(ValidatedModel):
         ]
     )
 
-    fechareconocimiento = models.DateField()
+    fechareconocimiento = models.DateField(validators=[fecha_no_futura])
     descripcionreconocimiento = models.CharField(max_length=100)
 
     entidadpatrocinadora = models.CharField(max_length=100)
@@ -188,11 +191,6 @@ class Reconocimientos(ValidatedModel):
 
     activarparaqueseveaenfront = models.BooleanField(default=True)
     rutacertificado = models.FileField(upload_to="certificados/reconocimientos/", blank=True, null=True)
-
-    def clean(self):
-        hoy = timezone.now().date()
-        if self.fechareconocimiento and self.fechareconocimiento > hoy:
-            raise ValidationError({"fechareconocimiento": "La fecha del reconocimiento no puede ser futura."})
 
     class Meta:
         db_table = "reconocimientos"
@@ -211,11 +209,12 @@ class CursosRealizados(ValidatedModel):
     )
 
     nombrecurso = models.CharField(max_length=100)
-    fechainicio = models.DateField()
-    fechafin = models.DateField()
 
-    # ✅ NO negativos
-    totalhoras = models.PositiveIntegerField()
+    fechainicio = models.DateField(validators=[fecha_no_futura])
+    fechafin = models.DateField(validators=[fecha_no_futura])
+
+    # ✅ NUNCA negativos (por validador + constraint)
+    totalhoras = models.IntegerField(validators=[MinValueValidator(0)])
 
     descripcioncurso = models.CharField(max_length=100)
 
@@ -234,18 +233,9 @@ class CursosRealizados(ValidatedModel):
     rutacertificado = models.FileField(upload_to="certificados/cursos/", blank=True, null=True)
 
     def clean(self):
-        hoy = timezone.now().date()
-
-        # ✅ Fin no puede ser menor que inicio
+        # ✅ fin >= inicio
         if self.fechafin and self.fechainicio and self.fechafin < self.fechainicio:
             raise ValidationError({"fechafin": "La fecha de fin NO puede ser menor que la fecha de inicio."})
-
-        # ✅ No cursos futuros
-        if self.fechainicio and self.fechainicio > hoy:
-            raise ValidationError({"fechainicio": "La fecha de inicio no puede ser futura."})
-
-        if self.fechafin and self.fechafin > hoy:
-            raise ValidationError({"fechafin": "La fecha de fin no puede ser futura."})
 
     class Meta:
         db_table = "cursosrealizados"
@@ -253,6 +243,10 @@ class CursosRealizados(ValidatedModel):
             models.CheckConstraint(
                 condition=Q(fechafin__gte=F("fechainicio")),
                 name="curso_fechas_validas"
+            ),
+            models.CheckConstraint(
+                condition=Q(totalhoras__gte=0),
+                name="curso_totalhoras_gte_0"
             ),
         ]
 
@@ -291,14 +285,10 @@ class ProductosLaborales(ValidatedModel):
     )
 
     nombreproducto = models.CharField(max_length=100)
-    fechaproducto = models.DateField()
+
+    fechaproducto = models.DateField(validators=[fecha_no_futura])
     descripcion = models.CharField(max_length=100)
     activarparaqueseveaenfront = models.BooleanField(default=True)
-
-    def clean(self):
-        hoy = timezone.now().date()
-        if self.fechaproducto and self.fechaproducto > hoy:
-            raise ValidationError({"fechaproducto": "La fecha del producto no puede ser futura."})
 
     class Meta:
         db_table = "productoslaborales"

@@ -120,14 +120,14 @@ def cv_pdf(request):
     p = canvas.Canvas(response, pagesize=letter)
     width, height = letter
 
-    # ✅ Márgenes
+    # Márgenes
     x_left = 2 * cm
     x_right = width - 2 * cm
     y = height - 2 * cm
 
     
     # Funciones de apoyo
-    
+
     def nueva_pagina_si_es_necesario():
         nonlocal y
         if y < 3 * cm:
